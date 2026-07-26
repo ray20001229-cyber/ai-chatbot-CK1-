@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.db
+.coverage
+htmlcov/
+Docker Desktop Installer.exe
+uvicorn.out.log
+uvicorn.err.log

@@ -1,0 +1,19 @@
+:root { font-family: system-ui, sans-serif; color: #172033; background: #f5f7fb; }
+body { margin: 0; }
+main { max-width: 920px; margin: 36px auto; padding: 0 20px 60px; }
+h1 { margin-bottom: 4px; }
+.hint { color: #637083; }
+textarea, pre, input { box-sizing: border-box; width: 100%; border: 1px solid #cdd5e1; border-radius: 8px; padding: 14px; background: white; }
+label { display: block; margin: 18px 0 6px; font-weight: 600; }
+input { margin-bottom: 12px; font: inherit; }
+textarea { resize: vertical; font: inherit; }
+.actions { display: flex; gap: 10px; margin: 14px 0; flex-wrap: wrap; }
+button { border: 0; border-radius: 7px; padding: 10px 16px; background: #2563eb; color: white; cursor: pointer; }
+button.secondary { background: #526174; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+pre { white-space: pre-wrap; min-height: 100px; }
+.task { background: white; border: 1px solid #dbe1ea; border-radius: 8px; padding: 14px; margin: 10px 0; }
+.memory { background: #fffbeb; border-color: #f5d77a; }
+.task h3 { margin: 0 0 8px; }
+.meta { color: #637083; font-size: 14px; }
+#message { min-height: 24px; color: #b42318; }

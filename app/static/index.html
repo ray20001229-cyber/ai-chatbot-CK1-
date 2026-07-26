@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 客服助手 MVP</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main>
+    <h1>AI 客服助手</h1>
+    <p class="hint">粘贴聊天记录，先审阅 AI 分析，再决定是否保存任务。</p>
+    <label for="conversationId">会话编号</label>
+    <input id="conversationId" value="default" maxlength="100"
+      placeholder="例如：客户手机号或工单号">
+    <textarea id="transcript" rows="12" placeholder="客户：我的退款三天了还没到账……"></textarea>
+    <div class="actions">
+      <button id="analyze">分析聊天</button>
+      <button id="confirm" disabled>确认并保存任务</button>
+      <button id="refresh" class="secondary">刷新任务列表</button>
+    </div>
+    <p id="message"></p>
+    <section>
+      <h2>分析结果</h2>
+      <pre id="result">尚未分析</pre>
+    </section>
+    <section>
+      <h2>会话记忆</h2>
+      <p class="hint">未完成和延期事项会在下次分析同一会话时自动召回。</p>
+      <div id="memories">加载中……</div>
+    </section>
+    <section>
+      <h2>已确认任务</h2>
+      <div id="tasks">加载中……</div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>
