@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import ConversationMemory, Reminder, Task
+from app.services.redis_store import acquire_lock, cache_delete, release_lock
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +58,8 @@ def scan_due_items(db: Session, now: datetime | None = None) -> int:
         )
 
     db.commit()
+    if created:
+        cache_delete("dashboard:v1")
     return created
 
 
@@ -108,5 +111,11 @@ async def reminder_scan_loop(interval_seconds: int) -> None:
 
 
 def _scan_with_new_session() -> None:
-    with SessionLocal() as db:
-        scan_due_items(db)
+    token = acquire_lock("lock:reminder-scan", ttl=55)
+    if token is None:
+        return
+    try:
+        with SessionLocal() as db:
+            scan_due_items(db)
+    finally:
+        release_lock("lock:reminder-scan", token)

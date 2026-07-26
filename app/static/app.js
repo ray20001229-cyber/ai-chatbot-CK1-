@@ -106,10 +106,29 @@ async function loadMemories() {
     </article>`).join("") : "当前会话暂无未完成记忆";
 }
 
+async function loadCalendar() {
+  const rows = await request("/api/calendar/events");
+  $("#calendarEvents").innerHTML = rows.length ? rows.map((event) => `
+    <article class="item calendar-event">
+      <h3>${escapeHtml(event.title)}</h3>
+      <div class="meta">
+        ${escapeHtml(event.source_type)} · ${formatTime(event.starts_at)}
+        ${event.ends_at ? ` 至 ${formatTime(event.ends_at)}` : ""}
+      </div>
+      <p>${escapeHtml(event.description || "")}</p>
+      ${event.source_type === "manual" ? `
+        <div class="item-actions">
+          <button class="edit-calendar small" data-id="${event.id}">编辑</button>
+          <button class="delete-calendar danger small" data-id="${event.id}">删除</button>
+        </div>` : ""}
+    </article>`).join("") : "暂无日历事件";
+}
+
 async function refreshAll() {
   try {
     await Promise.all([
       loadDashboard(), loadReminders(), loadCustomers(), loadTasks(), loadMemories(),
+      loadCalendar(),
     ]);
   } catch (error) {
     message.textContent = error.message;
@@ -180,6 +199,47 @@ $("#customerForm").addEventListener("submit", async (event) => {
   }
 });
 
+$("#calendarForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    await request("/api/calendar/events", {
+      method: "POST",
+      body: JSON.stringify({
+        title: $("#calendarTitle").value,
+        starts_at: new Date($("#calendarStart").value).toISOString(),
+        ends_at: $("#calendarEnd").value
+          ? new Date($("#calendarEnd").value).toISOString() : null,
+        customer_id: customerSelect.value || null,
+      }),
+    });
+    event.target.reset();
+    await loadCalendar();
+  } catch (error) {
+    message.textContent = error.message;
+  }
+});
+
+$("#calendarEvents").addEventListener("click", async (event) => {
+  const id = event.target.dataset.id;
+  if (!id) return;
+  try {
+    if (event.target.classList.contains("edit-calendar")) {
+      const title = prompt("新的事件标题");
+      if (!title) return;
+      await request(`/api/calendar/events/${id}`, {
+        method: "PATCH", body: JSON.stringify({ title }),
+      });
+    }
+    if (event.target.classList.contains("delete-calendar")) {
+      if (!confirm("确定删除该日历事件吗？")) return;
+      await request(`/api/calendar/events/${id}`, { method: "DELETE" });
+    }
+    await loadCalendar();
+  } catch (error) {
+    message.textContent = error.message;
+  }
+});
+
 $("#customers").addEventListener("click", async (event) => {
   const id = event.target.dataset.id;
   if (!id) return;
@@ -230,7 +290,7 @@ $("#tasks").addEventListener("click", async (event) => {
       if (!confirm("确定删除该任务吗？此操作无法从页面恢复。")) return;
       await request(`/api/tasks/${id}`, { method: "DELETE" });
     }
-    await Promise.all([loadTasks(), loadDashboard(), loadReminders()]);
+    await Promise.all([loadTasks(), loadDashboard(), loadReminders(), loadCalendar()]);
   } catch (error) {
     message.textContent = error.message;
   }
@@ -242,7 +302,7 @@ $("#memories").addEventListener("click", async (event) => {
   await request(`/api/memories/${id}`, {
     method: "PATCH", body: JSON.stringify({ status: "completed" }),
   });
-  await Promise.all([loadMemories(), loadDashboard(), loadReminders()]);
+  await Promise.all([loadMemories(), loadDashboard(), loadReminders(), loadCalendar()]);
 });
 
 $("#reminders").addEventListener("click", async (event) => {

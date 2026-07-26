@@ -9,10 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_llm_service
-from app.models import ConversationMemory, Customer, Reminder, Task
+from app.models import CalendarEvent, ConversationMemory, Customer, Reminder, Task
 from app.schemas import (
     AnalysisResult,
     AnalyzeRequest,
+    CalendarEventCreate,
+    CalendarEventRead,
+    CalendarEventUpdate,
     CustomerCreate,
     CustomerRead,
     CustomerUpdate,
@@ -26,6 +29,12 @@ from app.schemas import (
     TaskUpdate,
 )
 from app.services.llm import LLMService
+from app.services.calendar import (
+    delete_source_calendar,
+    sync_memory_calendar,
+    sync_task_calendar,
+)
+from app.services.redis_store import cache_delete, cache_get, cache_set
 from app.services.reminders import scan_due_items
 
 router = APIRouter(prefix="/api")
@@ -93,18 +102,21 @@ def confirm_task(
     )
     db.add(task)
     db.flush()
+    sync_task_calendar(db, task)
     if analysis.should_remember:
-        db.add(
-            ConversationMemory(
-                conversation_id=payload.conversation_id,
-                task_id=task.id,
-                summary=analysis.memory_summary,
-                details=payload.transcript,
-                status=analysis.memory_status.value,
-                resume_at=analysis.resume_at,
-            )
+        memory = ConversationMemory(
+            conversation_id=payload.conversation_id,
+            task_id=task.id,
+            summary=analysis.memory_summary,
+            details=payload.transcript,
+            status=analysis.memory_status.value,
+            resume_at=analysis.resume_at,
         )
+        db.add(memory)
+        db.flush()
+        sync_memory_calendar(db, memory)
     db.commit()
+    _invalidate_dashboard()
     db.refresh(task)
     return task
 
@@ -140,7 +152,9 @@ def update_task(
         setattr(task, field, value)
     if task.status == "completed":
         _dismiss_source_reminders(db, "task", task.id)
+    sync_task_calendar(db, task)
     db.commit()
+    _invalidate_dashboard()
     db.refresh(task)
     return task
 
@@ -153,8 +167,10 @@ def delete_task(task_id: uuid.UUID, db: Session = Depends(get_db)) -> Response:
             Reminder.source_type == "task", Reminder.source_id == task.id
         )
     )
+    delete_source_calendar(db, "task", task.id)
     db.delete(task)
     db.commit()
+    _invalidate_dashboard()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -189,7 +205,9 @@ def update_memory(
     memory.resume_at = payload.resume_at
     if memory.status == MemoryStatus.COMPLETED.value:
         _dismiss_source_reminders(db, "memory", memory.id)
+    sync_memory_calendar(db, memory)
     db.commit()
+    _invalidate_dashboard()
     db.refresh(memory)
     return memory
 
@@ -208,6 +226,7 @@ def create_customer(
         db.rollback()
         raise HTTPException(status_code=409, detail="客户编号已存在") from exc
     db.refresh(customer)
+    _invalidate_dashboard()
     return customer
 
 
@@ -231,6 +250,7 @@ def update_customer(
         db.rollback()
         raise HTTPException(status_code=409, detail="客户编号已存在") from exc
     db.refresh(customer)
+    _invalidate_dashboard()
     return customer
 
 
@@ -243,6 +263,7 @@ def delete_customer(
     customer = _get_customer(db, customer_id)
     db.delete(customer)
     db.commit()
+    _invalidate_dashboard()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -271,18 +292,22 @@ def dismiss_reminder(
         raise HTTPException(status_code=404, detail="提醒不存在")
     reminder.status = "dismissed"
     db.commit()
+    _invalidate_dashboard()
     db.refresh(reminder)
     return reminder
 
 
 @router.get("/dashboard", response_model=DashboardRead)
 def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
+    cached = cache_get("dashboard:v1")
+    if cached is not None:
+        return DashboardRead.model_validate(cached)
     now = datetime.now(timezone.utc)
     tasks = list(db.scalars(select(Task)))
     memories = list(db.scalars(select(ConversationMemory)))
     task_statuses = Counter(task.status for task in tasks)
     priorities = Counter(task.priority for task in tasks)
-    return DashboardRead(
+    result = DashboardRead(
         total_tasks=len(tasks),
         pending_tasks=task_statuses["pending"],
         in_progress_tasks=task_statuses["in_progress"],
@@ -312,6 +337,89 @@ def dashboard(db: Session = Depends(get_db)) -> DashboardRead:
             for key in ("pending", "in_progress", "completed")
         },
     )
+    cache_set("dashboard:v1", result.model_dump(mode="json"), ttl=30)
+    return result
+
+
+@router.post(
+    "/calendar/events",
+    response_model=CalendarEventRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_calendar_event(
+    payload: CalendarEventCreate, db: Session = Depends(get_db)
+) -> CalendarEvent:
+    if payload.customer_id and db.get(Customer, payload.customer_id) is None:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    event = CalendarEvent(
+        source_type="manual",
+        source_id=None,
+        status="scheduled",
+        **payload.model_dump(),
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.get("/calendar/events", response_model=list[CalendarEventRead])
+def list_calendar_events(
+    starts_from: datetime | None = None,
+    starts_to: datetime | None = None,
+    db: Session = Depends(get_db),
+) -> list[CalendarEvent]:
+    query = select(CalendarEvent)
+    if starts_from:
+        query = query.where(CalendarEvent.starts_at >= starts_from)
+    if starts_to:
+        query = query.where(CalendarEvent.starts_at <= starts_to)
+    return list(db.scalars(query.order_by(CalendarEvent.starts_at.asc())))
+
+
+@router.patch(
+    "/calendar/events/{event_id}", response_model=CalendarEventRead
+)
+def update_calendar_event(
+    event_id: uuid.UUID,
+    payload: CalendarEventUpdate,
+    db: Session = Depends(get_db),
+) -> CalendarEvent:
+    event = _get_calendar_event(db, event_id)
+    if event.source_type != "manual":
+        raise HTTPException(
+            status_code=409, detail="自动同步事件请通过对应任务或记忆修改"
+        )
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("customer_id") and db.get(
+        Customer, changes["customer_id"]
+    ) is None:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    for field, value in changes.items():
+        if hasattr(value, "value"):
+            value = value.value
+        setattr(event, field, value)
+    if event.ends_at and event.ends_at < event.starts_at:
+        raise HTTPException(status_code=422, detail="结束时间不能早于开始时间")
+    db.commit()
+    db.refresh(event)
+    return event
+
+
+@router.delete(
+    "/calendar/events/{event_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+def delete_calendar_event(
+    event_id: uuid.UUID, db: Session = Depends(get_db)
+) -> Response:
+    event = _get_calendar_event(db, event_id)
+    if event.source_type != "manual":
+        raise HTTPException(
+            status_code=409, detail="自动同步事件请通过对应任务或记忆删除"
+        )
+    db.delete(event)
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 def _get_task(db: Session, task_id: uuid.UUID) -> Task:
@@ -326,6 +434,15 @@ def _get_customer(db: Session, customer_id: uuid.UUID) -> Customer:
     if customer is None:
         raise HTTPException(status_code=404, detail="客户不存在")
     return customer
+
+
+def _get_calendar_event(
+    db: Session, event_id: uuid.UUID
+) -> CalendarEvent:
+    event = db.get(CalendarEvent, event_id)
+    if event is None:
+        raise HTTPException(status_code=404, detail="日历事件不存在")
+    return event
 
 
 def _dismiss_source_reminders(
@@ -348,3 +465,7 @@ def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _invalidate_dashboard() -> None:
+    cache_delete("dashboard:v1")

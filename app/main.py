@@ -9,12 +9,17 @@ from fastapi.staticfiles import StaticFiles
 from app.api import router
 from app.config import get_settings
 from app.services.reminders import reminder_scan_loop
+from app.services.redis_store import redis_ping
+from app.database import SessionLocal
+from app.services.calendar import reconcile_calendar
 
 BASE_DIR = Path(__file__).resolve().parent
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
+    with SessionLocal() as db:
+        reconcile_calendar(db)
     scanner = asyncio.create_task(
         reminder_scan_loop(settings.reminder_scan_interval_seconds)
     )
@@ -38,4 +43,7 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "redis": "ok" if redis_ping() else "degraded",
+    }

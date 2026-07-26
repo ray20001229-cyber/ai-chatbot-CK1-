@@ -16,6 +16,7 @@
 - `/api/reminders`：到期任务与延期事项提醒
 - `POST /api/reminders/scan`：立即执行一次到期扫描
 - `GET /api/dashboard`：任务、风险、提醒、延期记忆和客户统计
+- `/api/calendar/events`：内部日历事件的新增、查询、编辑和删除
 - `/`：简单 HTML 测试页面
 - `/docs`：FastAPI Swagger 文档
 
@@ -25,10 +26,10 @@
 
 前置条件：Python 3.12、Docker Desktop，PowerShell。
 
-1. 启动 PostgreSQL：
+1. 启动 PostgreSQL 和 Redis：
 
    ```powershell
-   docker compose up -d db
+   docker compose up -d db redis
    ```
 
 2. 创建虚拟环境并安装依赖：
@@ -91,6 +92,7 @@ pytest -q
 | `APP_NAME` | 应用名称 |
 | `APP_ENV` | 运行环境标识 |
 | `REMINDER_SCAN_INTERVAL_SECONDS` | 后台到期扫描间隔，默认 60 秒 |
+| `REDIS_URL` | Redis 连接地址，默认 `redis://localhost:6379/0` |
 
 密钥只从 `.env`/环境变量读取，`.env` 已加入 `.gitignore`。
 
@@ -120,3 +122,21 @@ pytest -q
 
 工作台还支持客户资料 CRUD、任务编辑与删除，以及任务状态、逾期、高风险、
 提醒、延期记忆和客户数量统计。
+
+## Redis 与日历
+
+Redis 用于：
+
+- 多进程或多实例之间的提醒扫描分布式锁；
+- 统计仪表盘的短时缓存；
+- 连接失败时自动熔断并降级到 PostgreSQL，不影响核心业务。
+
+内置日历使用 PostgreSQL 持久化：
+
+- 有截止时间的未完成任务自动同步为日历事件；
+- 有恢复时间的延期记忆自动同步为日历事件；
+- 修改或完成任务、记忆时自动更新或移除对应事件；
+- 支持手动日历事件的新增、编辑、删除和时间范围查询。
+
+当前日历是应用内部日历，尚未连接 Google Calendar、Outlook Calendar 或
+企业日历账号。

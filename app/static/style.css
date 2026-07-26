@@ -53,11 +53,17 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .meta { color: #64748b; font-size: 13px; margin-bottom: 8px; }
 .reminder { background: #fffbeb; border-color: #facc15; }
 .memory { background: #f0fdf4; border-color: #86efac; }
+.calendar-event { background: #eff6ff; border-color: #93c5fd; }
+.calendar-form {
+  display: grid; grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 8px; margin: 14px 0;
+}
 .hint { color: #64748b; }
 #message { min-height: 22px; color: #b42318; }
 .badge { display: inline-block; padding: 2px 7px; border-radius: 999px; background: #e2e8f0; }
 @media (max-width: 800px) {
   .two-column { grid-template-columns: 1fr; }
   .dashboard { grid-template-columns: repeat(2, 1fr); }
+  .calendar-form { grid-template-columns: 1fr; }
   header { align-items: flex-start; }
 }

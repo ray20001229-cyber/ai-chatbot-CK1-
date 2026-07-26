@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4.1-mini"
     openai_base_url: str | None = None
     reminder_scan_interval_seconds: int = 60
+    redis_url: str = "redis://localhost:6379/0"
 
 
 @lru_cache

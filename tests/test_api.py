@@ -245,6 +245,9 @@ def test_task_edit_delete_and_due_reminder(client_factory):
     )
     assert created.status_code == 201
     task_id = created.json()["id"]
+    auto_events = client.get("/api/calendar/events").json()
+    assert len(auto_events) == 1
+    assert auto_events[0]["source_type"] == "task"
 
     edited = client.patch(
         f"/api/tasks/{task_id}",
@@ -270,7 +273,46 @@ def test_task_edit_delete_and_due_reminder(client_factory):
     )
     assert completed.status_code == 200
     assert client.get("/api/reminders").json() == []
+    assert client.get("/api/calendar/events").json() == []
 
     deleted = client.delete(f"/api/tasks/{task_id}")
     assert deleted.status_code == 204
     assert client.get("/api/tasks").json() == []
+
+
+def test_manual_calendar_event_crud(client_factory):
+    client = client_factory(AnalysisResult.model_validate(CASES[0]["analysis"]))
+    created = client.post(
+        "/api/calendar/events",
+        json={
+            "title": "Call customer",
+            "description": "Discuss follow-up",
+            "starts_at": "2026-08-01T09:00:00+08:00",
+            "ends_at": "2026-08-01T09:30:00+08:00",
+            "all_day": False,
+        },
+    )
+    assert created.status_code == 201
+    event_id = created.json()["id"]
+    assert created.json()["source_type"] == "manual"
+
+    listed = client.get(
+        "/api/calendar/events",
+        params={
+            "starts_from": "2026-08-01T00:00:00+08:00",
+            "starts_to": "2026-08-02T00:00:00+08:00",
+        },
+    )
+    assert listed.status_code == 200
+    assert len(listed.json()) == 1
+
+    updated = client.patch(
+        f"/api/calendar/events/{event_id}",
+        json={"title": "Updated call", "status": "completed"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["title"] == "Updated call"
+
+    deleted = client.delete(f"/api/calendar/events/{event_id}")
+    assert deleted.status_code == 204
+    assert client.get("/api/calendar/events").json() == []

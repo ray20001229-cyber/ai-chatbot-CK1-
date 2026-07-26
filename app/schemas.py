@@ -213,3 +213,54 @@ class DashboardRead(BaseModel):
     customers: int
     tasks_by_priority: dict[str, int]
     tasks_by_status: dict[str, int]
+
+
+class CalendarEventStatus(StrEnum):
+    SCHEDULED = "scheduled"
+    COMPLETED = "completed"
+    CANCELLED = "cancelled"
+
+
+class CalendarEventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = None
+    starts_at: datetime
+    ends_at: datetime | None = None
+    all_day: bool = False
+    conversation_id: str | None = Field(default=None, max_length=100)
+    customer_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_times(self) -> "CalendarEventCreate":
+        if self.ends_at and self.ends_at < self.starts_at:
+            raise ValueError("结束时间不能早于开始时间")
+        return self
+
+
+class CalendarEventUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    description: str | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    all_day: bool | None = None
+    status: CalendarEventStatus | None = None
+    conversation_id: str | None = Field(default=None, max_length=100)
+    customer_id: uuid.UUID | None = None
+
+
+class CalendarEventRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_type: str
+    source_id: uuid.UUID | None
+    conversation_id: str | None
+    customer_id: uuid.UUID | None
+    title: str
+    description: str | None
+    starts_at: datetime
+    ends_at: datetime | None
+    all_day: bool
+    status: CalendarEventStatus
+    created_at: datetime
+    updated_at: datetime
