@@ -138,6 +138,11 @@ def test_deferred_task_is_remembered_and_recalled(client_factory):
             "memory_summary": "下周一继续办理补开发票",
             "memory_status": "deferred",
             "resume_at": "2026-07-27T09:00:00+08:00",
+            "should_schedule": True,
+            "calendar_event_title": "确认发票抬头并补开发票",
+            "calendar_starts_at": "2026-07-27T09:00:00+08:00",
+            "calendar_time_basis": "exact",
+            "calendar_reason": "客户明确要求下周一继续办理",
         }
     )
     client = client_factory(analysis)
@@ -158,6 +163,11 @@ def test_deferred_task_is_remembered_and_recalled(client_factory):
     assert memories.status_code == 200
     assert memories.json()[0]["status"] == "deferred"
     assert memories.json()[0]["summary"] == "下周一继续办理补开发票"
+    calendar_events = client.get("/api/calendar/events").json()
+    assert len(calendar_events) == 1
+    assert calendar_events[0]["source_type"] == "memory"
+    assert calendar_events[0]["title"] == "确认发票抬头并补开发票"
+    assert calendar_events[0]["time_basis"] == "exact"
 
     analyzed = client.post(
         "/api/analyze",
@@ -188,6 +198,7 @@ def test_deferred_task_is_remembered_and_recalled(client_factory):
     assert client.get(
         "/api/memories", params={"conversation_id": "customer-001"}
     ).json() == []
+    assert client.get("/api/calendar/events").json() == []
 
 
 def test_customer_crud_and_dashboard(client_factory):
@@ -316,3 +327,33 @@ def test_manual_calendar_event_crud(client_factory):
     deleted = client.delete(f"/api/calendar/events/{event_id}")
     assert deleted.status_code == 204
     assert client.get("/api/calendar/events").json() == []
+
+
+def test_suggested_calendar_time_populates_task_due_date(client_factory):
+    analysis = AnalysisResult.model_validate(
+        {
+            **CASES[0]["analysis"],
+            "due_at": None,
+            "should_schedule": True,
+            "calendar_event_title": "跟进客户补开发票",
+            "calendar_starts_at": "2026-07-29T10:00:00+08:00",
+            "calendar_time_basis": "suggested",
+            "calendar_reason": "未提到明确时间，按中优先级建议三天后处理",
+        }
+    )
+    client = client_factory(analysis)
+    created = client.post(
+        "/api/tasks/confirm",
+        json={
+            "conversation_id": "suggested-time",
+            "transcript": "Please handle this when appropriate.",
+            "analysis": analysis.model_dump(mode="json"),
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["due_at"].startswith("2026-07-29T10:00:00")
+    assert created.json()["calendar_title"] == "跟进客户补开发票"
+    assert created.json()["calendar_time_basis"] == "suggested"
+    event = client.get("/api/calendar/events").json()[0]
+    assert event["title"] == "跟进客户补开发票"
+    assert event["time_reason"] == "未提到明确时间，按中优先级建议三天后处理"

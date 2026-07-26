@@ -43,6 +43,12 @@ class ReminderStatus(StrEnum):
     DISMISSED = "dismissed"
 
 
+class CalendarTimeBasis(StrEnum):
+    EXACT = "exact"
+    INFERRED = "inferred"
+    SUGGESTED = "suggested"
+
+
 class AnalyzeRequest(BaseModel):
     transcript: str = Field(min_length=1, max_length=50_000)
     conversation_id: str = Field(default="default", min_length=1, max_length=100)
@@ -84,6 +90,22 @@ class AnalysisResult(BaseModel):
     resume_at: datetime | None = Field(
         default=None, description="延期事项恢复处理时间；未明确时为 null"
     )
+    should_schedule: bool = Field(
+        default=False, description="是否需要把该事项自动加入日历"
+    )
+    calendar_event_title: str | None = Field(
+        default=None, description="根据聊天上下文总结的日历事件标题"
+    )
+    calendar_starts_at: datetime | None = Field(
+        default=None, description="日历开始时间，必须为带时区的 ISO 8601 时间"
+    )
+    calendar_time_basis: CalendarTimeBasis | None = Field(
+        default=None,
+        description="exact=明确提到，inferred=相对时间推导，suggested=合理建议",
+    )
+    calendar_reason: str | None = Field(
+        default=None, description="选择该日历时间的简短理由"
+    )
 
     @model_validator(mode="after")
     def validate_task_fields(self) -> "AnalysisResult":
@@ -106,6 +128,24 @@ class AnalysisResult(BaseModel):
             self.memory_summary = None
             self.memory_status = None
             self.resume_at = None
+        if self.should_schedule:
+            required_calendar = (
+                self.calendar_event_title,
+                self.calendar_starts_at,
+                self.calendar_time_basis,
+                self.calendar_reason,
+            )
+            if not self.has_task:
+                raise ValueError("只有任务事项才能自动加入日历")
+            if any(value is None for value in required_calendar):
+                raise ValueError("日历标题、时间、时间依据和理由不能为空")
+            if self.calendar_starts_at.tzinfo is None:
+                raise ValueError("日历时间必须包含时区")
+        else:
+            self.calendar_event_title = None
+            self.calendar_starts_at = None
+            self.calendar_time_basis = None
+            self.calendar_reason = None
         return self
 
 
@@ -128,6 +168,9 @@ class TaskRead(BaseModel):
     status: TaskStatus
     priority: Priority
     due_at: datetime | None
+    calendar_title: str | None
+    calendar_time_basis: CalendarTimeBasis | None
+    calendar_reason: str | None
     customer_sentiment: Sentiment
     risk_level: RiskLevel
     suggested_reply: str
@@ -262,5 +305,7 @@ class CalendarEventRead(BaseModel):
     ends_at: datetime | None
     all_day: bool
     status: CalendarEventStatus
+    time_basis: CalendarTimeBasis | None
+    time_reason: str | None
     created_at: datetime
     updated_at: datetime

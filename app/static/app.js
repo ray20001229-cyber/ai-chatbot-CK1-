@@ -114,8 +114,10 @@ async function loadCalendar() {
       <div class="meta">
         ${escapeHtml(event.source_type)} · ${formatTime(event.starts_at)}
         ${event.ends_at ? ` 至 ${formatTime(event.ends_at)}` : ""}
+        ${event.time_basis ? ` · ${escapeHtml(event.time_basis)}` : ""}
       </div>
       <p>${escapeHtml(event.description || "")}</p>
+      ${event.time_reason ? `<p><strong>时间依据：</strong>${escapeHtml(event.time_reason)}</p>` : ""}
       ${event.source_type === "manual" ? `
         <div class="item-actions">
           <button class="edit-calendar small" data-id="${event.id}">编辑</button>

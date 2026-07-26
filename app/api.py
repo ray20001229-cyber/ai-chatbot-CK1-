@@ -87,6 +87,14 @@ def confirm_task(
     if payload.customer_id and db.get(Customer, payload.customer_id) is None:
         raise HTTPException(status_code=404, detail="客户不存在")
 
+    is_deferred = (
+        analysis.should_remember
+        and analysis.memory_status == MemoryStatus.DEFERRED
+    )
+    task_due_at = analysis.due_at
+    if analysis.should_schedule and not is_deferred and task_due_at is None:
+        task_due_at = analysis.calendar_starts_at
+
     task = Task(
         conversation_id=payload.conversation_id,
         customer_id=payload.customer_id,
@@ -95,7 +103,14 @@ def confirm_task(
         title=analysis.task_title,
         status=analysis.task_status.value,
         priority=analysis.priority.value,
-        due_at=analysis.due_at,
+        due_at=task_due_at,
+        calendar_title=analysis.calendar_event_title,
+        calendar_time_basis=(
+            analysis.calendar_time_basis.value
+            if analysis.calendar_time_basis
+            else None
+        ),
+        calendar_reason=analysis.calendar_reason,
         customer_sentiment=analysis.customer_sentiment.value,
         risk_level=analysis.risk_level.value,
         suggested_reply=analysis.suggested_reply,
@@ -104,13 +119,27 @@ def confirm_task(
     db.flush()
     sync_task_calendar(db, task)
     if analysis.should_remember:
+        memory_resume_at = analysis.resume_at
+        if (
+            analysis.should_schedule
+            and analysis.memory_status == MemoryStatus.DEFERRED
+            and memory_resume_at is None
+        ):
+            memory_resume_at = analysis.calendar_starts_at
         memory = ConversationMemory(
             conversation_id=payload.conversation_id,
             task_id=task.id,
             summary=analysis.memory_summary,
             details=payload.transcript,
             status=analysis.memory_status.value,
-            resume_at=analysis.resume_at,
+            resume_at=memory_resume_at,
+            calendar_title=analysis.calendar_event_title,
+            calendar_time_basis=(
+                analysis.calendar_time_basis.value
+                if analysis.calendar_time_basis
+                else None
+            ),
+            calendar_reason=analysis.calendar_reason,
         )
         db.add(memory)
         db.flush()

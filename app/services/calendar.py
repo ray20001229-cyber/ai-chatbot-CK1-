@@ -20,10 +20,12 @@ def sync_task_calendar(db: Session, task: Task) -> None:
         db.add(event)
     event.conversation_id = task.conversation_id
     event.customer_id = task.customer_id
-    event.title = f"任务截止：{task.title}"
+    event.title = task.calendar_title or f"任务截止：{task.title}"
     event.description = task.customer_intent
     event.starts_at = task.due_at
     event.status = "scheduled"
+    event.time_basis = task.calendar_time_basis
+    event.time_reason = task.calendar_reason
 
 
 def sync_memory_calendar(db: Session, memory: ConversationMemory) -> None:
@@ -44,10 +46,14 @@ def sync_memory_calendar(db: Session, memory: ConversationMemory) -> None:
         event = CalendarEvent(source_type="memory", source_id=memory.id)
         db.add(event)
     event.conversation_id = memory.conversation_id
-    event.title = f"恢复延期事项：{memory.summary}"
+    event.title = (
+        memory.calendar_title or f"恢复延期事项：{memory.summary}"
+    )
     event.description = memory.details
     event.starts_at = memory.resume_at
     event.status = "scheduled"
+    event.time_basis = memory.calendar_time_basis
+    event.time_reason = memory.calendar_reason
 
 
 def delete_source_calendar(

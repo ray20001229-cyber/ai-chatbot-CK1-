@@ -57,6 +57,9 @@ class Task(Base):
     status: Mapped[str] = mapped_column(String(30), nullable=False)
     priority: Mapped[str] = mapped_column(String(20), nullable=False)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    calendar_title: Mapped[str | None] = mapped_column(String(300))
+    calendar_time_basis: Mapped[str | None] = mapped_column(String(20))
+    calendar_reason: Mapped[str | None] = mapped_column(Text)
     customer_sentiment: Mapped[str] = mapped_column(String(30), nullable=False)
     risk_level: Mapped[str] = mapped_column(String(20), nullable=False)
     suggested_reply: Mapped[str] = mapped_column(Text, nullable=False)
@@ -87,6 +90,9 @@ class ConversationMemory(Base):
     details: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     resume_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    calendar_title: Mapped[str | None] = mapped_column(String(300))
+    calendar_time_basis: Mapped[str | None] = mapped_column(String(20))
+    calendar_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -156,6 +162,8 @@ class CalendarEvent(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="scheduled", index=True
     )
+    time_basis: Mapped[str | None] = mapped_column(String(20))
+    time_reason: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
