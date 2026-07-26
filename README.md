@@ -11,6 +11,11 @@
 - `GET /api/tasks`：查询已确认任务
 - `GET /api/memories`：查询会话中未完成或延期的长期记忆
 - `PATCH /api/memories/{id}`：更新记忆状态或恢复处理时间
+- `PATCH /api/tasks/{id}`、`DELETE /api/tasks/{id}`：编辑和删除任务
+- `/api/customers`：客户资料的新增、查询、编辑和删除
+- `/api/reminders`：到期任务与延期事项提醒
+- `POST /api/reminders/scan`：立即执行一次到期扫描
+- `GET /api/dashboard`：任务、风险、提醒、延期记忆和客户统计
 - `/`：简单 HTML 测试页面
 - `/docs`：FastAPI Swagger 文档
 
@@ -85,6 +90,7 @@ pytest -q
 | `OPENAI_BASE_URL` | 可选的兼容 API 地址 |
 | `APP_NAME` | 应用名称 |
 | `APP_ENV` | 运行环境标识 |
+| `REMINDER_SCAN_INTERVAL_SECONDS` | 后台到期扫描间隔，默认 60 秒 |
 
 密钥只从 `.env`/环境变量读取，`.env` 已加入 `.gitignore`。
 
@@ -99,3 +105,18 @@ pytest -q
 该会话尚未完成的 `pending`/`deferred` 记忆并交给模型参考；用户确认任务
 后才写入新记忆。“稍后再做”等事项保存为 `deferred`，可带 `resume_at`，
 完成后可在页面中标记完成，后续分析不再召回。
+
+## 自动提醒与管理功能
+
+应用启动后会在后台定时扫描 PostgreSQL：
+
+- 截止时间已到、状态不是 `completed` 的任务会生成提醒；
+- `deferred` 且 `resume_at` 已到的记忆会生成恢复处理提醒；
+- 同一任务或记忆只生成一条提醒，避免重复通知；
+- 任务或记忆标记完成后，关联提醒自动关闭。
+
+提醒目前显示在本地 Web 工作台中，不发送邮件、短信或日历通知。单机 MVP
+使用 FastAPI 进程内扫描器；生产环境多实例部署时应迁移到独立调度服务。
+
+工作台还支持客户资料 CRUD、任务编辑与删除，以及任务状态、逾期、高风险、
+提醒、延期记忆和客户数量统计。

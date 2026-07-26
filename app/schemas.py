@@ -38,6 +38,11 @@ class MemoryStatus(StrEnum):
     COMPLETED = "completed"
 
 
+class ReminderStatus(StrEnum):
+    ACTIVE = "active"
+    DISMISSED = "dismissed"
+
+
 class AnalyzeRequest(BaseModel):
     transcript: str = Field(min_length=1, max_length=50_000)
     conversation_id: str = Field(default="default", min_length=1, max_length=100)
@@ -107,6 +112,7 @@ class AnalysisResult(BaseModel):
 class TaskConfirmRequest(BaseModel):
     transcript: str = Field(min_length=1, max_length=50_000)
     conversation_id: str = Field(default="default", min_length=1, max_length=100)
+    customer_id: uuid.UUID | None = None
     analysis: AnalysisResult
 
 
@@ -115,6 +121,7 @@ class TaskRead(BaseModel):
 
     id: uuid.UUID
     conversation_id: str
+    customer_id: uuid.UUID | None
     source_transcript: str
     customer_intent: str
     title: str
@@ -125,6 +132,16 @@ class TaskRead(BaseModel):
     risk_level: RiskLevel
     suggested_reply: str
     created_at: datetime
+    updated_at: datetime
+
+
+class TaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    status: TaskStatus | None = None
+    priority: Priority | None = None
+    due_at: datetime | None = None
+    customer_id: uuid.UUID | None = None
+    suggested_reply: str | None = None
 
 
 class MemoryRead(BaseModel):
@@ -144,3 +161,55 @@ class MemoryRead(BaseModel):
 class MemoryUpdate(BaseModel):
     status: MemoryStatus
     resume_at: datetime | None = None
+
+
+class CustomerCreate(BaseModel):
+    external_id: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=200)
+    notes: str | None = None
+
+
+class CustomerUpdate(BaseModel):
+    external_id: str | None = Field(default=None, min_length=1, max_length=100)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    phone: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=200)
+    notes: str | None = None
+
+
+class CustomerRead(CustomerCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class ReminderRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    source_type: str
+    source_id: uuid.UUID
+    conversation_id: str
+    title: str
+    message: str
+    remind_at: datetime
+    status: ReminderStatus
+    triggered_at: datetime
+
+
+class DashboardRead(BaseModel):
+    total_tasks: int
+    pending_tasks: int
+    in_progress_tasks: int
+    completed_tasks: int
+    overdue_tasks: int
+    high_risk_tasks: int
+    active_reminders: int
+    deferred_memories: int
+    customers: int
+    tasks_by_priority: dict[str, int]
+    tasks_by_status: dict[str, int]

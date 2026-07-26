@@ -15,9 +15,9 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", repr=False)
     openai_model: str = "gpt-4.1-mini"
     openai_base_url: str | None = None
+    reminder_scan_interval_seconds: int = 60
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-

@@ -188,3 +188,89 @@ def test_deferred_task_is_remembered_and_recalled(client_factory):
     assert client.get(
         "/api/memories", params={"conversation_id": "customer-001"}
     ).json() == []
+
+
+def test_customer_crud_and_dashboard(client_factory):
+    client = client_factory(AnalysisResult.model_validate(CASES[0]["analysis"]))
+    created = client.post(
+        "/api/customers",
+        json={
+            "external_id": "C-001",
+            "name": "Test Customer",
+            "phone": "13800000000",
+            "email": "test@example.com",
+            "notes": "VIP",
+        },
+    )
+    assert created.status_code == 201
+    customer_id = created.json()["id"]
+
+    duplicate = client.post(
+        "/api/customers",
+        json={"external_id": "C-001", "name": "Duplicate"},
+    )
+    assert duplicate.status_code == 409
+
+    updated = client.patch(
+        f"/api/customers/{customer_id}",
+        json={"name": "Updated Customer", "notes": "Updated"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["name"] == "Updated Customer"
+
+    dashboard = client.get("/api/dashboard")
+    assert dashboard.status_code == 200
+    assert dashboard.json()["customers"] == 1
+
+    deleted = client.delete(f"/api/customers/{customer_id}")
+    assert deleted.status_code == 204
+    assert client.get("/api/customers").json() == []
+
+
+def test_task_edit_delete_and_due_reminder(client_factory):
+    analysis_data = {
+        **CASES[0]["analysis"],
+        "task_title": "Overdue follow-up",
+        "due_at": "2020-01-01T00:00:00+00:00",
+    }
+    analysis = AnalysisResult.model_validate(analysis_data)
+    client = client_factory(analysis)
+    created = client.post(
+        "/api/tasks/confirm",
+        json={
+            "conversation_id": "reminder-case",
+            "transcript": "Please follow up.",
+            "analysis": analysis.model_dump(mode="json"),
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    edited = client.patch(
+        f"/api/tasks/{task_id}",
+        json={"title": "Edited title", "priority": "high"},
+    )
+    assert edited.status_code == 200
+    assert edited.json()["title"] == "Edited title"
+    assert edited.json()["priority"] == "high"
+
+    scanned = client.post("/api/reminders/scan")
+    assert scanned.status_code == 200
+    assert scanned.json()["created"] == 1
+    assert client.post("/api/reminders/scan").json()["created"] == 0
+
+    reminders = client.get("/api/reminders").json()
+    assert len(reminders) == 1
+    dashboard = client.get("/api/dashboard").json()
+    assert dashboard["overdue_tasks"] == 1
+    assert dashboard["active_reminders"] == 1
+
+    completed = client.patch(
+        f"/api/tasks/{task_id}", json={"status": "completed"}
+    )
+    assert completed.status_code == 200
+    assert client.get("/api/reminders").json() == []
+
+    deleted = client.delete(f"/api/tasks/{task_id}")
+    assert deleted.status_code == 204
+    assert client.get("/api/tasks").json() == []

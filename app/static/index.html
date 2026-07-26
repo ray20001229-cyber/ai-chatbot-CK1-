@@ -3,34 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>AI 客服助手 MVP</title>
+  <title>AI 客服工作台</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main>
-    <h1>AI 客服助手</h1>
-    <p class="hint">粘贴聊天记录，先审阅 AI 分析，再决定是否保存任务。</p>
-    <label for="conversationId">会话编号</label>
-    <input id="conversationId" value="default" maxlength="100"
-      placeholder="例如：客户手机号或工单号">
-    <textarea id="transcript" rows="12" placeholder="客户：我的退款三天了还没到账……"></textarea>
-    <div class="actions">
-      <button id="analyze">分析聊天</button>
-      <button id="confirm" disabled>确认并保存任务</button>
-      <button id="refresh" class="secondary">刷新任务列表</button>
+  <header>
+    <div>
+      <h1>AI 客服工作台</h1>
+      <p>聊天分析、会话记忆、到期提醒、客户与任务管理</p>
     </div>
-    <p id="message"></p>
+    <button id="refreshAll" class="secondary">刷新全部</button>
+  </header>
+  <main>
     <section>
-      <h2>分析结果</h2>
-      <pre id="result">尚未分析</pre>
+      <h2>数据统计</h2>
+      <div id="dashboard" class="dashboard">加载中……</div>
     </section>
+
+    <section class="alert-section">
+      <div class="section-title">
+        <h2>提醒中心</h2>
+        <button id="scanReminders">立即扫描</button>
+      </div>
+      <div id="reminders">加载中……</div>
+    </section>
+
+    <div class="two-column">
+      <section>
+        <h2>客户资料</h2>
+        <form id="customerForm" class="form-grid">
+          <input id="customerExternalId" required placeholder="客户编号">
+          <input id="customerName" required placeholder="客户姓名">
+          <input id="customerPhone" placeholder="手机号">
+          <input id="customerEmail" type="email" placeholder="邮箱">
+          <textarea id="customerNotes" rows="2" placeholder="备注"></textarea>
+          <button type="submit">新增客户</button>
+        </form>
+        <div id="customers">加载中……</div>
+      </section>
+
+      <section>
+        <h2>AI 聊天分析</h2>
+        <label for="conversationId">会话编号</label>
+        <input id="conversationId" value="default" maxlength="100">
+        <label for="customerSelect">关联客户</label>
+        <select id="customerSelect"><option value="">不关联客户</option></select>
+        <textarea id="transcript" rows="10"
+          placeholder="客户：我的退款三天了还没到账……"></textarea>
+        <div class="actions">
+          <button id="analyze">分析聊天</button>
+          <button id="confirm" disabled>确认并保存任务</button>
+        </div>
+        <p id="message"></p>
+        <pre id="result">尚未分析</pre>
+      </section>
+    </div>
+
     <section>
       <h2>会话记忆</h2>
-      <p class="hint">未完成和延期事项会在下次分析同一会话时自动召回。</p>
+      <p class="hint">同一会话的未完成和延期事项会在下次分析时自动召回。</p>
       <div id="memories">加载中……</div>
     </section>
+
     <section>
-      <h2>已确认任务</h2>
+      <div class="section-title">
+        <h2>任务管理</h2>
+        <select id="taskFilter">
+          <option value="">全部状态</option>
+          <option value="pending">待处理</option>
+          <option value="in_progress">办理中</option>
+          <option value="completed">已完成</option>
+        </select>
+      </div>
       <div id="tasks">加载中……</div>
     </section>
   </main>
