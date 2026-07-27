@@ -9,3 +9,5 @@ htmlcov/
 Docker Desktop Installer.exe
 uvicorn.out.log
 uvicorn.err.log
+data/uploads/
+.test_uploads/

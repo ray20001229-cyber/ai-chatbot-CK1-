@@ -5,16 +5,89 @@ const customerSelect = $("#customerSelect");
 const message = $("#message");
 let currentAnalysis = null;
 let customerRows = [];
+let conversationRows = [];
+let activeConversation = null;
+let chatSocket = null;
 
 async function request(url, options = {}) {
+  const headers = options.body instanceof FormData
+    ? {} : { "Content-Type": "application/json" };
   const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...options,
   });
   if (response.status === 204) return null;
   const body = await response.json();
   if (!response.ok) throw new Error(body.detail || "请求失败");
   return body;
+}
+
+async function loadConversations() {
+  conversationRows = await request("/api/conversations");
+  $("#conversationList").innerHTML = conversationRows.length
+    ? conversationRows.map((row) => `
+      <button class="conversation-row ${activeConversation?.id === row.id ? "active" : ""}"
+        data-id="${row.id}">
+        <strong>${escapeHtml(row.subject || row.external_id)}</strong>
+        <div class="meta">${escapeHtml(row.channel)} · ${escapeHtml(row.status)}</div>
+      </button>`).join("")
+    : `<p class="hint" style="padding:12px">暂无会话</p>`;
+}
+
+async function selectConversation(id) {
+  activeConversation = conversationRows.find((row) => row.id === id);
+  if (!activeConversation) return;
+  $("#chatTitle").textContent =
+    `${activeConversation.subject || activeConversation.external_id} · ${activeConversation.channel}`;
+  await Promise.all([loadChatMessages(), loadChatAttachments()]);
+  connectChatSocket();
+  await loadConversations();
+}
+
+async function loadChatMessages() {
+  if (!activeConversation) return;
+  const rows = await request(
+    `/api/conversations/${activeConversation.id}/messages`
+  );
+  $("#chatMessages").innerHTML = rows.map(renderMessage).join("");
+  $("#chatMessages").scrollTop = $("#chatMessages").scrollHeight;
+}
+
+function renderMessage(row) {
+  return `<div class="bubble ${row.sender_type}">
+    <div class="meta">${escapeHtml(row.sender_name || row.sender_type)} · ${formatTime(row.received_at)}</div>
+    <div>${escapeHtml(row.content)}</div>
+  </div>`;
+}
+
+async function loadChatAttachments() {
+  if (!activeConversation) return;
+  const rows = await request(
+    `/api/conversations/${activeConversation.id}/attachments`
+  );
+  $("#chatAttachments").innerHTML = rows.length
+    ? `<strong>附件：</strong>` + rows.map((row) =>
+      `<a class="attachment-link" href="/api/attachments/${row.id}/download">
+        ${escapeHtml(row.original_name)} (${Math.ceil(row.size_bytes / 1024)}KB)
+      </a>`).join("")
+    : "";
+}
+
+function connectChatSocket() {
+  if (chatSocket) chatSocket.close();
+  const protocol = location.protocol === "https:" ? "wss" : "ws";
+  chatSocket = new WebSocket(
+    `${protocol}://${location.host}/api/ws/conversations/${activeConversation.id}`
+  );
+  chatSocket.onmessage = (event) => {
+    const row = JSON.parse(event.data);
+    if (row.type === "error") {
+      message.textContent = row.detail;
+      return;
+    }
+    $("#chatMessages").insertAdjacentHTML("beforeend", renderMessage(row));
+    $("#chatMessages").scrollTop = $("#chatMessages").scrollHeight;
+  };
 }
 
 function escapeHtml(value) {
@@ -131,11 +204,78 @@ async function refreshAll() {
     await Promise.all([
       loadDashboard(), loadReminders(), loadCustomers(), loadTasks(), loadMemories(),
       loadCalendar(),
+      loadConversations(),
     ]);
   } catch (error) {
     message.textContent = error.message;
   }
 }
+
+$("#conversationForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const created = await request("/api/conversations", {
+      method: "POST",
+      body: JSON.stringify({
+        channel: $("#conversationChannel").value,
+        external_id: $("#conversationExternalId").value,
+        subject: $("#conversationSubject").value || null,
+        customer_id: customerSelect.value || null,
+      }),
+    });
+    event.target.reset();
+    await loadConversations();
+    await selectConversation(created.id);
+  } catch (error) {
+    message.textContent = error.message;
+  }
+});
+
+$("#conversationList").addEventListener("click", (event) => {
+  const row = event.target.closest(".conversation-row");
+  if (row) selectConversation(row.dataset.id);
+});
+
+$("#chatForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!activeConversation) {
+    message.textContent = "请先选择会话。";
+    return;
+  }
+  const content = $("#chatContent").value.trim();
+  const file = $("#chatAttachment").files[0];
+  try {
+    if (content) {
+      const payload = {
+        sender_type: $("#chatSenderType").value,
+        sender_name: $("#chatSenderName").value || null,
+        content,
+      };
+      if (chatSocket?.readyState === WebSocket.OPEN) {
+        chatSocket.send(JSON.stringify(payload));
+      } else {
+        await request(`/api/conversations/${activeConversation.id}/messages`, {
+          method: "POST", body: JSON.stringify(payload),
+        });
+        await loadChatMessages();
+      }
+      $("#chatContent").value = "";
+    }
+    if (file) {
+      const form = new FormData();
+      form.append("upload", file);
+      await request(
+        `/api/conversations/${activeConversation.id}/attachments`,
+        { method: "POST", body: form },
+      );
+      $("#chatAttachment").value = "";
+      await loadChatAttachments();
+    }
+    await loadConversations();
+  } catch (error) {
+    message.textContent = error.message;
+  }
+});
 
 $("#analyze").addEventListener("click", async () => {
   if (!transcript.value.trim()) return;

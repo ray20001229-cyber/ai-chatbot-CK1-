@@ -17,6 +17,16 @@ class Settings(BaseSettings):
     openai_base_url: str | None = None
     reminder_scan_interval_seconds: int = 60
     redis_url: str = "redis://localhost:6379/0"
+    webhook_shared_secret: str = Field(default="", repr=False)
+    upload_dir: str = "data/uploads"
+    max_upload_bytes: int = 10 * 1024 * 1024
+    email_imap_enabled: bool = False
+    email_imap_host: str = ""
+    email_imap_port: int = 993
+    email_imap_username: str = ""
+    email_imap_password: str = Field(default="", repr=False)
+    email_imap_folder: str = "INBOX"
+    email_poll_interval_seconds: int = 60
 
 
 @lru_cache

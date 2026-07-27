@@ -173,3 +173,94 @@ class CalendarEvent(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = (
+        UniqueConstraint(
+            "channel", "external_id", name="uq_conversations_channel_external"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4
+    )
+    channel: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    external_id: Mapped[str] = mapped_column(String(200), nullable=False)
+    customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("customers.id", ondelete="SET NULL"), index=True
+    )
+    subject: Mapped[str | None] = mapped_column(String(300))
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="open", index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    __table_args__ = (
+        UniqueConstraint(
+            "channel",
+            "external_message_id",
+            name="uq_messages_channel_external",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    channel: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
+    external_message_id: Mapped[str | None] = mapped_column(String(300))
+    sender_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    sender_id: Mapped[str | None] = mapped_column(String(200))
+    sender_name: Mapped[str | None] = mapped_column(String(200))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+class Attachment(Base):
+    __tablename__ = "attachments"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, primary_key=True, default=uuid.uuid4
+    )
+    conversation_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid,
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("messages.id", ondelete="CASCADE"), index=True
+    )
+    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_name: Mapped[str] = mapped_column(
+        String(100), nullable=False, unique=True
+    )
+    content_type: Mapped[str] = mapped_column(String(150), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(nullable=False)
+    storage_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )

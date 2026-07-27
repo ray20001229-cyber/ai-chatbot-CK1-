@@ -1,6 +1,7 @@
 import os
 
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
+os.environ["UPLOAD_DIR"] = ".test_uploads"
 
 import pytest
 from fastapi.testclient import TestClient

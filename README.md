@@ -17,6 +17,11 @@
 - `POST /api/reminders/scan`：立即执行一次到期扫描
 - `GET /api/dashboard`：任务、风险、提醒、延期记忆和客户统计
 - `/api/calendar/events`：内部日历事件的新增、查询、编辑和删除
+- `/api/conversations`：统一管理微信、邮件、在线客服和网页会话
+- `/api/conversations/{id}/messages`：多轮消息历史和发送
+- `/api/ws/conversations/{id}`：WebSocket 实时聊天
+- `/api/inbound/wechat`、`/api/inbound/support`：外部消息 Webhook
+- `/api/conversations/{id}/attachments`：附件上传、列表和下载
 - `/`：简单 HTML 测试页面
 - `/docs`：FastAPI Swagger 文档
 
@@ -93,6 +98,16 @@ pytest -q
 | `APP_ENV` | 运行环境标识 |
 | `REMINDER_SCAN_INTERVAL_SECONDS` | 后台到期扫描间隔，默认 60 秒 |
 | `REDIS_URL` | Redis 连接地址，默认 `redis://localhost:6379/0` |
+| `WEBHOOK_SHARED_SECRET` | 微信和在线客服 Webhook 共享密钥 |
+| `UPLOAD_DIR` | 附件存储目录，默认 `data/uploads` |
+| `MAX_UPLOAD_BYTES` | 单个附件大小上限，默认 10MB |
+| `EMAIL_IMAP_ENABLED` | 是否启动邮件自动收取 |
+| `EMAIL_IMAP_HOST` | IMAP 服务器地址 |
+| `EMAIL_IMAP_PORT` | IMAP SSL 端口，默认 993 |
+| `EMAIL_IMAP_USERNAME` | 邮箱账号 |
+| `EMAIL_IMAP_PASSWORD` | 邮箱密码或应用专用密码 |
+| `EMAIL_IMAP_FOLDER` | 收件文件夹，默认 `INBOX` |
+| `EMAIL_POLL_INTERVAL_SECONDS` | 邮件轮询间隔，默认 60 秒 |
 
 密钥只从 `.env`/环境变量读取，`.env` 已加入 `.gitignore`。
 
@@ -143,3 +158,40 @@ Redis 用于：
 
 当前日历是应用内部日历，尚未连接 Google Calendar、Outlook Calendar 或
 企业日历账号。
+
+## 多渠道消息与附件
+
+消息中心把不同渠道统一保存到 `conversations`、`messages` 和
+`attachments` 表：
+
+- 微信和在线客服平台将消息转换为 README 所示的 JSON 后调用对应 Webhook；
+- Webhook 使用 `X-Webhook-Token` 校验，并按渠道和外部消息 ID 去重；
+- 邮件连接器通过 IMAP SSL 定时读取 `UNSEEN` 邮件；
+- 浏览器通过 WebSocket 实时收发消息，同时保留完整历史；
+- 支持 JPG、PNG、GIF、WebP、PDF、TXT、CSV、DOCX 和 XLSX；
+- 文件采用随机存储名，限制大小并拒绝不在白名单中的类型；
+- `.env`、附件目录和本地凭据均不会提交到 GitHub 或复制进 Docker 镜像。
+
+Webhook 请求示例：
+
+```powershell
+$headers = @{
+  "Content-Type" = "application/json"
+  "X-Webhook-Token" = "你的 WEBHOOK_SHARED_SECRET"
+}
+$body = @{
+  external_conversation_id = "customer-openid"
+  external_message_id = "platform-message-id"
+  sender_id = "customer-openid"
+  sender_name = "客户"
+  content = "我的订单什么时候发货？"
+  subject = "订单咨询"
+} | ConvertTo-Json
+Invoke-RestMethod -Method Post `
+  -Uri http://127.0.0.1:8000/api/inbound/wechat `
+  -Headers $headers -Body $body
+```
+
+微信公众平台、企业微信和第三方在线客服的原始回调格式各不相同；生产接入时
+需要在平台侧配置回调 URL，并将其字段映射到上述统一 JSON。没有平台凭据时，
+可以直接在本地消息中心使用 `web` 渠道和 WebSocket 测试完整流程。

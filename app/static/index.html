@@ -28,6 +28,47 @@
       <div id="reminders">加载中……</div>
     </section>
 
+    <section>
+      <div class="section-title">
+        <h2>多渠道消息中心</h2>
+        <span class="hint">微信 · 邮件 · 在线客服 · WebSocket 实时聊天</span>
+      </div>
+      <form id="conversationForm" class="conversation-form">
+        <select id="conversationChannel">
+          <option value="web">网页聊天</option>
+          <option value="support">在线客服</option>
+          <option value="wechat">微信</option>
+          <option value="email">邮件</option>
+        </select>
+        <input id="conversationExternalId" required placeholder="外部会话ID/客户标识">
+        <input id="conversationSubject" placeholder="会话主题">
+        <button type="submit">创建会话</button>
+      </form>
+      <div class="message-center">
+        <aside id="conversationList">加载中……</aside>
+        <div class="chat-panel">
+          <div id="chatTitle" class="chat-title">请选择会话</div>
+          <div id="chatMessages" class="chat-messages"></div>
+          <form id="chatForm">
+            <div class="chat-controls">
+              <select id="chatSenderType">
+                <option value="agent">客服发送</option>
+                <option value="customer">模拟客户</option>
+              </select>
+              <input id="chatSenderName" value="本地客服" placeholder="发送者名称">
+            </div>
+            <textarea id="chatContent" rows="3" placeholder="输入消息……"></textarea>
+            <div class="actions">
+              <input id="chatAttachment" type="file"
+                accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.txt,.csv,.docx,.xlsx">
+              <button type="submit">实时发送</button>
+            </div>
+          </form>
+          <div id="chatAttachments"></div>
+        </div>
+      </div>
+    </section>
+
     <div class="two-column">
       <section>
         <h2>客户资料</h2>

@@ -309,3 +309,91 @@ class CalendarEventRead(BaseModel):
     time_reason: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class MessageChannel(StrEnum):
+    WECHAT = "wechat"
+    EMAIL = "email"
+    SUPPORT = "support"
+    WEB = "web"
+
+
+class SenderType(StrEnum):
+    CUSTOMER = "customer"
+    AGENT = "agent"
+    SYSTEM = "system"
+
+
+class ConversationStatus(StrEnum):
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class ConversationCreate(BaseModel):
+    channel: MessageChannel = MessageChannel.WEB
+    external_id: str = Field(min_length=1, max_length=200)
+    subject: str | None = Field(default=None, max_length=300)
+    customer_id: uuid.UUID | None = None
+
+
+class ConversationUpdate(BaseModel):
+    subject: str | None = Field(default=None, max_length=300)
+    status: ConversationStatus | None = None
+    customer_id: uuid.UUID | None = None
+
+
+class ConversationRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    channel: MessageChannel
+    external_id: str
+    customer_id: uuid.UUID | None
+    subject: str | None
+    status: ConversationStatus
+    created_at: datetime
+    updated_at: datetime
+
+
+class MessageCreate(BaseModel):
+    sender_type: SenderType
+    sender_id: str | None = Field(default=None, max_length=200)
+    sender_name: str | None = Field(default=None, max_length=200)
+    content: str = Field(min_length=1, max_length=50_000)
+
+
+class MessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    channel: MessageChannel
+    external_message_id: str | None
+    sender_type: SenderType
+    sender_id: str | None
+    sender_name: str | None
+    content: str
+    received_at: datetime
+    created_at: datetime
+
+
+class InboundMessage(BaseModel):
+    external_conversation_id: str = Field(min_length=1, max_length=200)
+    external_message_id: str = Field(min_length=1, max_length=300)
+    sender_id: str | None = Field(default=None, max_length=200)
+    sender_name: str | None = Field(default=None, max_length=200)
+    content: str = Field(min_length=1, max_length=50_000)
+    subject: str | None = Field(default=None, max_length=300)
+    received_at: datetime | None = None
+
+
+class AttachmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    message_id: uuid.UUID | None
+    original_name: str
+    content_type: str
+    size_bytes: int
+    created_at: datetime
