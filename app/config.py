@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     email_imap_password: str = Field(default="", repr=False)
     email_imap_folder: str = "INBOX"
     email_poll_interval_seconds: int = 60
+    auto_reply_default_enabled: bool = False
+    auto_reply_recent_messages: int = 12
+    auto_reply_relevant_messages: int = 8
+    auto_reply_max_context_chars: int = 16_000
+    auto_reply_risk_handoff_levels: str = "high,critical"
 
 
 @lru_cache

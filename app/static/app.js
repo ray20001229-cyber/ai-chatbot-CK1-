@@ -29,7 +29,9 @@ async function loadConversations() {
       <button class="conversation-row ${activeConversation?.id === row.id ? "active" : ""}"
         data-id="${row.id}">
         <strong>${escapeHtml(row.subject || row.external_id)}</strong>
-        <div class="meta">${escapeHtml(row.channel)} · ${escapeHtml(row.status)}</div>
+        <div class="meta">${escapeHtml(row.channel)} · ${escapeHtml(row.status)}
+          · ${row.handoff_status === "bot" ? "机器人" : "人工"}
+        </div>
       </button>`).join("")
     : `<p class="hint" style="padding:12px">暂无会话</p>`;
 }
@@ -39,6 +41,13 @@ async function selectConversation(id) {
   if (!activeConversation) return;
   $("#chatTitle").textContent =
     `${activeConversation.subject || activeConversation.external_id} · ${activeConversation.channel}`;
+  $("#automationControls").hidden = false;
+  $("#automationEnabled").checked = activeConversation.automation_enabled;
+  $("#handoffStatus").value = activeConversation.handoff_status;
+  $("#handoffReason").textContent = activeConversation.handoff_reason || "";
+  $("#conversationSummary").hidden = !activeConversation.memory_summary;
+  $("#summaryText").textContent =
+    activeConversation.memory_summary || "尚未生成摘要";
   await Promise.all([loadChatMessages(), loadChatAttachments()]);
   connectChatSocket();
   await loadConversations();
@@ -234,6 +243,30 @@ $("#conversationForm").addEventListener("submit", async (event) => {
 $("#conversationList").addEventListener("click", (event) => {
   const row = event.target.closest(".conversation-row");
   if (row) selectConversation(row.dataset.id);
+});
+
+$("#saveAutomation").addEventListener("click", async () => {
+  if (!activeConversation) return;
+  try {
+    const updated = await request(
+      `/api/conversations/${activeConversation.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          automation_enabled: $("#automationEnabled").checked,
+          handoff_status: $("#handoffStatus").value,
+          handoff_reason: $("#handoffStatus").value === "bot"
+            ? null : (activeConversation.handoff_reason || "客服手动设置"),
+        }),
+      },
+    );
+    activeConversation = updated;
+    message.textContent = "自动回复与转人工设置已保存。";
+    await loadConversations();
+    await selectConversation(updated.id);
+  } catch (error) {
+    message.textContent = error.message;
+  }
 });
 
 $("#chatForm").addEventListener("submit", async (event) => {

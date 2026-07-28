@@ -48,6 +48,23 @@
         <aside id="conversationList">加载中……</aside>
         <div class="chat-panel">
           <div id="chatTitle" class="chat-title">请选择会话</div>
+          <div id="automationControls" class="automation-controls" hidden>
+            <label>
+              <input id="automationEnabled" type="checkbox">
+              启用 AI 自动回复
+            </label>
+            <select id="handoffStatus">
+              <option value="bot">机器人接待</option>
+              <option value="pending">等待人工</option>
+              <option value="human">人工接待中</option>
+            </select>
+            <button id="saveAutomation" type="button" class="secondary small">保存设置</button>
+            <span id="handoffReason" class="hint"></span>
+          </div>
+          <details id="conversationSummary" class="conversation-summary" hidden>
+            <summary>查看上下文记忆摘要</summary>
+            <p id="summaryText"></p>
+          </details>
           <div id="chatMessages" class="chat-messages"></div>
           <form id="chatForm">
             <div class="chat-controls">

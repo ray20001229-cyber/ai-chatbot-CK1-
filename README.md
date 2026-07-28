@@ -195,3 +195,42 @@ Invoke-RestMethod -Method Post `
 微信公众平台、企业微信和第三方在线客服的原始回调格式各不相同；生产接入时
 需要在平台侧配置回调 URL，并将其字段映射到上述统一 JSON。没有平台凭据时，
 可以直接在本地消息中心使用 `web` 渠道和 WebSocket 测试完整流程。
+
+## 上下文记忆、自动回复与转人工
+
+消息中心现在支持按会话启用 AI 自动回复。默认关闭，避免尚未完成平台和业务 API
+配置时误发消息。选中会话后可在页面切换“机器人接待”“等待人工”和“人工接待中”。
+
+客户主动发送消息后，系统执行以下流程：
+
+1. 按外部消息 ID 保存并去重；同一条入站消息只处理一次。
+2. 选取最近消息，并按当前问题关键词召回较早的相关消息。
+3. 合并会话滚动摘要、客户资料、未完成任务和延期记忆。
+4. 使用 `AutoReplyDecision` Pydantic 结构要求模型返回回复、风险、转人工判断和新摘要。
+5. 低风险且信息充分时生成一条与入站消息关联的机器人回复。
+6. 投诉、人工请求、高风险、业务事实不足或模型异常时停止自动回复并转人工。
+
+机器人回复通过 `messages.reply_to_message_id` 与客户消息一一对应，并由数据库唯一索引
+保证并发请求也不会重复回复。会话进入 `pending` 或 `human` 后会持续锁定自动回复，
+直到客服在工作台手动切回 `bot`。
+
+管理与排查接口：
+
+- `PATCH /api/conversations/{id}`：设置 `automation_enabled`、`handoff_status` 和原因。
+- `POST /api/conversations/{id}/messages/{message_id}/process`：手动处理一条客户消息；
+  已经处理过时返回原结果，不重复调用模型。
+- `GET /api/conversations/{id}/messages`：查看处理状态和回复关联。
+
+相关配置：
+
+| 变量 | 说明 |
+|---|---|
+| `AUTO_REPLY_DEFAULT_ENABLED` | 新会话是否默认自动回复，建议生产初期保持 `false` |
+| `AUTO_REPLY_RECENT_MESSAGES` | 固定召回的最近消息数量 |
+| `AUTO_REPLY_RELEVANT_MESSAGES` | 额外召回的关键词相关历史数量 |
+| `AUTO_REPLY_MAX_CONTEXT_CHARS` | 发送给模型的最大上下文字符数 |
+| `AUTO_REPLY_RISK_HANDOFF_LEVELS` | 强制转人工的风险等级，默认 `high,critical` |
+
+当前微信和在线客服 Webhook 会自动执行上述流程，并把 AI 回复写入统一消息记录及实时
+WebSocket。正式接入微信或企业微信后，平台适配器还需要将这条回复调用相应平台发送 API
+发给客户；模型不会绕过平台适配器直接向外发送。

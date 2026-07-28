@@ -195,6 +195,17 @@ class Conversation(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="open", index=True
     )
+    automation_enabled: Mapped[bool] = mapped_column(
+        nullable=False, default=False
+    )
+    handoff_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="bot", index=True
+    )
+    handoff_reason: Mapped[str | None] = mapped_column(Text)
+    memory_summary: Mapped[str | None] = mapped_column(Text)
+    summary_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -227,10 +238,19 @@ class Message(Base):
     )
     channel: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     external_message_id: Mapped[str | None] = mapped_column(String(300))
+    reply_to_message_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey("messages.id", ondelete="SET NULL"),
+        unique=True,
+        index=True,
+    )
     sender_type: Mapped[str] = mapped_column(String(20), nullable=False)
     sender_id: Mapped[str | None] = mapped_column(String(200))
     sender_name: Mapped[str | None] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    processing_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="received", index=True
+    )
     received_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

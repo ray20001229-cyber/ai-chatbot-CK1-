@@ -32,6 +32,12 @@ class RiskLevel(StrEnum):
     CRITICAL = "critical"
 
 
+class HandoffStatus(StrEnum):
+    BOT = "bot"
+    PENDING = "pending"
+    HUMAN = "human"
+
+
 class MemoryStatus(StrEnum):
     PENDING = "pending"
     DEFERRED = "deferred"
@@ -340,6 +346,9 @@ class ConversationUpdate(BaseModel):
     subject: str | None = Field(default=None, max_length=300)
     status: ConversationStatus | None = None
     customer_id: uuid.UUID | None = None
+    automation_enabled: bool | None = None
+    handoff_status: HandoffStatus | None = None
+    handoff_reason: str | None = Field(default=None, max_length=1000)
 
 
 class ConversationRead(BaseModel):
@@ -351,6 +360,11 @@ class ConversationRead(BaseModel):
     customer_id: uuid.UUID | None
     subject: str | None
     status: ConversationStatus
+    automation_enabled: bool
+    handoff_status: HandoffStatus
+    handoff_reason: str | None
+    memory_summary: str | None
+    summary_updated_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -369,10 +383,12 @@ class MessageRead(BaseModel):
     conversation_id: uuid.UUID
     channel: MessageChannel
     external_message_id: str | None
+    reply_to_message_id: uuid.UUID | None
     sender_type: SenderType
     sender_id: str | None
     sender_name: str | None
     content: str
+    processing_status: str
     received_at: datetime
     created_at: datetime
 
@@ -397,3 +413,47 @@ class AttachmentRead(BaseModel):
     content_type: str
     size_bytes: int
     created_at: datetime
+
+
+class AutoReplyDecision(BaseModel):
+    should_reply: bool = Field(
+        description="是否允许机器人针对本次客户消息自动回复"
+    )
+    handoff_required: bool = Field(
+        description="是否应停止自动回复并转交人工"
+    )
+    handoff_reason: str | None = Field(
+        default=None, description="转人工的简短原因"
+    )
+    risk_level: RiskLevel
+    reply: str | None = Field(
+        default=None, description="可直接发送给客户的简洁回复"
+    )
+    updated_summary: str = Field(
+        min_length=1,
+        max_length=4000,
+        description="包含客户诉求、已确认事实、承诺、待办和未解决问题的滚动摘要",
+    )
+
+    @model_validator(mode="after")
+    def validate_reply_decision(self) -> "AutoReplyDecision":
+        if self.handoff_required:
+            self.should_reply = False
+            self.reply = None
+            if not self.handoff_reason:
+                raise ValueError("转人工时必须说明原因")
+        elif self.should_reply and not self.reply:
+            raise ValueError("自动回复时回复内容不能为空")
+        else:
+            self.reply = None
+        return self
+
+
+class AutomationProcessRead(BaseModel):
+    inbound_message_id: uuid.UUID
+    duplicate: bool
+    action: str
+    reply_message: MessageRead | None = None
+    handoff_status: HandoffStatus
+    handoff_reason: str | None = None
+    memory_summary: str | None = None

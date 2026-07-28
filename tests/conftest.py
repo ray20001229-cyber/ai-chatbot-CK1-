@@ -11,19 +11,35 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.database import Base, get_db
 from app.dependencies import get_llm_service
 from app.main import app
-from app.schemas import AnalysisResult
+from app.schemas import AnalysisResult, AutoReplyDecision
 
 
 class FakeLLMService:
     def __init__(self, result: AnalysisResult) -> None:
         self.result = result
         self.last_memory_context: str | None = None
+        self.auto_reply_result = AutoReplyDecision(
+            should_reply=True,
+            handoff_required=False,
+            risk_level="low",
+            reply="您好，已收到您的问题。",
+            updated_summary="客户正在咨询问题，等待进一步处理。",
+        )
+        self.auto_reply_calls = 0
+        self.last_auto_reply_context: str | None = None
 
     async def analyze(
         self, transcript: str, memory_context: str | None = None
     ) -> AnalysisResult:
         self.last_memory_context = memory_context
         return self.result
+
+    async def decide_auto_reply(
+        self, *, customer_message: str, context: str
+    ) -> AutoReplyDecision:
+        self.auto_reply_calls += 1
+        self.last_auto_reply_context = context
+        return self.auto_reply_result
 
 
 @pytest.fixture

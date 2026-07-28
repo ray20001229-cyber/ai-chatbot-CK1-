@@ -22,9 +22,11 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
+from app.dependencies import get_llm_service
 from app.models import Attachment, Conversation, Customer, Message
 from app.schemas import (
     AttachmentRead,
+    AutomationProcessRead,
     ConversationCreate,
     ConversationRead,
     ConversationUpdate,
@@ -32,7 +34,9 @@ from app.schemas import (
     MessageCreate,
     MessageRead,
 )
+from app.services.auto_reply import process_customer_message
 from app.services.attachments import save_upload
+from app.services.llm import LLMService
 from app.services.messaging import (
     create_message,
     get_or_create_conversation,
@@ -59,6 +63,7 @@ def create_conversation(
         customer_id=payload.customer_id,
         subject=payload.subject,
         status="open",
+        automation_enabled=get_settings().auto_reply_default_enabled,
     )
     db.add(conversation)
     try:
@@ -157,6 +162,7 @@ async def post_message(
     conversation_id: uuid.UUID,
     payload: MessageCreate,
     db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
 ) -> Message:
     conversation = _get_conversation(db, conversation_id)
     message, _ = create_message(
@@ -168,6 +174,16 @@ async def post_message(
         content=payload.content,
     )
     await manager.broadcast(conversation_id, serialize_message(message))
+    if payload.sender_type.value == "customer":
+        _, reply, _ = await process_customer_message(
+            db,
+            conversation=conversation,
+            inbound=message,
+            llm=llm,
+            settings=get_settings(),
+        )
+        if reply:
+            await manager.broadcast(conversation_id, serialize_message(reply))
     return message
 
 
@@ -176,9 +192,10 @@ async def inbound_wechat(
     payload: InboundMessage,
     x_webhook_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
 ) -> Message:
     _verify_webhook(x_webhook_token)
-    return await _receive_inbound("wechat", payload, db)
+    return await _receive_inbound("wechat", payload, db, llm)
 
 
 @router.post("/inbound/support", response_model=MessageRead)
@@ -186,9 +203,45 @@ async def inbound_support(
     payload: InboundMessage,
     x_webhook_token: str | None = Header(default=None),
     db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
 ) -> Message:
     _verify_webhook(x_webhook_token)
-    return await _receive_inbound("support", payload, db)
+    return await _receive_inbound("support", payload, db, llm)
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/process",
+    response_model=AutomationProcessRead,
+)
+async def process_inbound_message(
+    conversation_id: uuid.UUID,
+    message_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
+) -> AutomationProcessRead:
+    conversation = _get_conversation(db, conversation_id)
+    message = db.get(Message, message_id)
+    if message is None or message.conversation_id != conversation.id:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    action, reply, duplicate = await process_customer_message(
+        db,
+        conversation=conversation,
+        inbound=message,
+        llm=llm,
+        settings=get_settings(),
+    )
+    if reply and not duplicate:
+        await manager.broadcast(conversation.id, serialize_message(reply))
+    db.refresh(conversation)
+    return AutomationProcessRead(
+        inbound_message_id=message.id,
+        duplicate=duplicate,
+        action=action,
+        reply_message=reply,
+        handoff_status=conversation.handoff_status,
+        handoff_reason=conversation.handoff_reason,
+        memory_summary=conversation.memory_summary,
+    )
 
 
 @router.post(
@@ -254,6 +307,7 @@ async def conversation_websocket(
     websocket: WebSocket,
     conversation_id: uuid.UUID,
     db: Session = Depends(get_db),
+    llm: LLMService = Depends(get_llm_service),
 ) -> None:
     conversation = db.get(Conversation, conversation_id)
     if conversation is None:
@@ -284,18 +338,34 @@ async def conversation_websocket(
             )
             serialized = serialize_message(message)
             await manager.broadcast(conversation_id, serialized)
+            if payload.sender_type.value == "customer":
+                _, reply, _ = await process_customer_message(
+                    db,
+                    conversation=conversation,
+                    inbound=message,
+                    llm=llm,
+                    settings=get_settings(),
+                )
+                if reply:
+                    await manager.broadcast(
+                        conversation_id, serialize_message(reply)
+                    )
     except WebSocketDisconnect:
         manager.disconnect(conversation_id, websocket)
 
 
 async def _receive_inbound(
-    channel: str, payload: InboundMessage, db: Session
+    channel: str,
+    payload: InboundMessage,
+    db: Session,
+    llm: LLMService,
 ) -> Message:
     conversation = get_or_create_conversation(
         db,
         channel=channel,
         external_id=payload.external_conversation_id,
         subject=payload.subject,
+        automation_enabled=get_settings().auto_reply_default_enabled,
     )
     message, created = create_message(
         db,
@@ -309,6 +379,15 @@ async def _receive_inbound(
     )
     if created:
         await manager.broadcast(conversation.id, serialize_message(message))
+        action, reply, _ = await process_customer_message(
+            db,
+            conversation=conversation,
+            inbound=message,
+            llm=llm,
+            settings=get_settings(),
+        )
+        if reply:
+            await manager.broadcast(conversation.id, serialize_message(reply))
     return message
 
 

@@ -75,6 +75,15 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .conversation-row.active { background: #dbeafe; }
 .chat-panel { display: flex; flex-direction: column; min-width: 0; }
 .chat-title { padding: 13px; font-weight: 700; border-bottom: 1px solid #dce3ed; }
+.automation-controls {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid #dce3ed;
+}
+.automation-controls label { display: flex; gap: 6px; margin: 0; }
+.automation-controls input { width: auto; }
+.automation-controls select { width: auto; }
+.conversation-summary { padding: 8px 12px; background: #f8fafc; }
+.conversation-summary p { white-space: pre-wrap; margin-bottom: 0; }
 .chat-messages { flex: 1; max-height: 360px; overflow-y: auto; padding: 14px; }
 .bubble {
   max-width: 76%; padding: 9px 11px; margin: 8px 0; border-radius: 12px;
