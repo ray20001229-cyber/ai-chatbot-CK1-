@@ -10,4 +10,5 @@ Docker Desktop Installer.exe
 uvicorn.out.log
 uvicorn.err.log
 data/uploads/
+data/logs/
 .test_uploads/

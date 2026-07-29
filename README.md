@@ -75,6 +75,20 @@
 
 6. 浏览器访问 <http://127.0.0.1:8000>。
 
+### Windows 自动启动
+
+如果希望关闭 Codex 或终端后仍可访问，可把
+`scripts/run_local_server.ps1` 注册为 Windows 登录任务。该脚本每 15 秒检查一次
+`/health`，服务退出后会自动重启；日志保存在 `data/logs/local-server.log`。
+
+Docker Compose 也包含 `web` 服务，网络可访问 Docker Hub 时可执行：
+
+```powershell
+docker compose up -d --build web
+```
+
+`web`、PostgreSQL 和 Redis 均配置了持续运行或自动重启。
+
 ## 运行测试
 
 测试使用内存数据库和假的大模型服务，不消耗 API 配额：
