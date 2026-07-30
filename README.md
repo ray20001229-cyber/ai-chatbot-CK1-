@@ -84,10 +84,11 @@
 Docker Compose 也包含 `web` 服务，网络可访问 Docker Hub 时可执行：
 
 ```powershell
+alembic upgrade head
 docker compose up -d --build web
 ```
 
-`web`、PostgreSQL 和 Redis 均配置了持续运行或自动重启。
+数据库迁移应在构建前显式执行；`web`、PostgreSQL 和 Redis 均配置了持续运行或自动重启。
 
 ## 运行测试
 
